@@ -1,14 +1,15 @@
 // Prisma schema for Rent & Flatmate Finder
-// Default datasource is SQLite for zero-config local setup.
-// For production hosting (Render/Railway), switch provider to "postgresql"
-// and set DATABASE_URL to your Postgres connection string (see README).
+// Default datasource is PostgreSQL, matching the one-click Render Blueprint
+// deploy (render.yaml) which provisions a free Postgres instance automatically.
+// For local development without Postgres, you can temporarily switch
+// provider to "sqlite" and set DATABASE_URL="file:./dev.db" (see README).
 
 generator client {
   provider = "prisma-client-js"
 }
 
 datasource db {
-  provider = "sqlite"
+  provider = "postgresql"
   url      = env("DATABASE_URL")
 }
 

@@ -44,9 +44,19 @@ frontend/
 
 ### 1. Backend
 
+The schema defaults to PostgreSQL (to match the one-click Render deploy below).
+For local development you have two options:
+
+**Option A — quick local testing with SQLite (no DB setup required):**
+In `backend/prisma/schema.prisma`, change `provider = "postgresql"` to
+`provider = "sqlite"`, and set `DATABASE_URL="file:./dev.db"` in `.env`.
+
+**Option B — use a local/cloud Postgres instance:** keep the schema as-is and
+set `DATABASE_URL` to your Postgres connection string in `.env`.
+
 ```bash
 cd backend
-cp .env.example .env       # edit values as needed (see below)
+cp .env.example .env       # edit DATABASE_URL etc. as needed (see above)
 npm install
 npx prisma generate
 npx prisma migrate dev --name init
@@ -97,13 +107,26 @@ ADMIN_PASSWORD=Admin@12345
 VITE_API_URL=http://localhost:4000
 ```
 
-### Deploying to Production (Postgres)
-SQLite is used by default for zero-config local setup. To deploy (Render/Railway/etc.):
-1. Provision a Postgres database and copy its connection string.
-2. In `backend/prisma/schema.prisma`, change `provider = "sqlite"` to `provider = "postgresql"`.
-3. Set `DATABASE_URL` to the Postgres connection string in your host's environment variables.
-4. Run `npx prisma migrate deploy` as part of your build/release step.
-5. Set `CLIENT_URL` to your deployed frontend's URL (for CORS) and deploy the frontend with `VITE_API_URL` pointing at your deployed backend.
+## Deploying (One-Click via Render Blueprint)
+
+This repo includes a `render.yaml` Blueprint that provisions the Postgres
+database, backend, and frontend together in a single step:
+
+1. Push this repo to GitHub (already done if you're reading this on GitHub).
+2. In the [Render Dashboard](https://render.com), click **New +** → **Blueprint**.
+3. Connect this repository and select the `main` branch. Render reads `render.yaml` automatically.
+4. Click **Apply**. Render provisions:
+   - A free Postgres database (`rent-flatmate-db`)
+   - The backend web service (`rent-flatmate-backend`) — `DATABASE_URL`, `JWT_SECRET`, and `CLIENT_URL` are wired automatically
+   - The frontend static site (`rent-flatmate-frontend`) — `VITE_API_URL` is wired automatically to the backend's URL
+5. You'll be prompted for a few secret values (marked `sync: false` in `render.yaml`): `ANTHROPIC_API_KEY` (optional — leave blank to use the rule-based fallback), `ADMIN_PASSWORD`, and SMTP credentials (optional — leave blank to log emails to console).
+6. Once both services are live, open the backend's **Shell** tab and run `npm run seed` to create the admin account.
+7. Visit the frontend's URL (shown on its Render dashboard page) — the app is live.
+
+This avoids manually creating a database, two services, and cross-wiring environment variables by hand.
+
+### Manual Deploy (alternative)
+If you'd rather not use the Blueprint, you can create the Postgres database, backend web service, and frontend (on Render's static sites or Vercel) individually — set `rootDir`/build/start commands as shown in `render.yaml`, and wire `DATABASE_URL`, `CLIENT_URL`, and `VITE_API_URL` by hand using the values described above.
 
 ## Database Schema
 
