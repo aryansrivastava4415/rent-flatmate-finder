@@ -1,0 +1,130 @@
+// Prisma schema for Rent & Flatmate Finder
+// Default datasource is SQLite for zero-config local setup.
+// For production hosting (Render/Railway), switch provider to "postgresql"
+// and set DATABASE_URL to your Postgres connection string (see README).
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  TENANT
+  OWNER
+  ADMIN
+}
+
+enum ListingStatus {
+  ACTIVE
+  FILLED
+}
+
+enum RoomType {
+  PRIVATE
+  SHARED
+  STUDIO
+}
+
+enum FurnishingStatus {
+  FURNISHED
+  SEMI_FURNISHED
+  UNFURNISHED
+}
+
+enum InterestStatus {
+  PENDING
+  ACCEPTED
+  DECLINED
+}
+
+enum ScoreSource {
+  LLM
+  RULE_BASED
+}
+
+model User {
+  id            String         @id @default(uuid())
+  email         String         @unique
+  password      String
+  name          String
+  role          Role
+  isActive      Boolean        @default(true)
+  createdAt     DateTime       @default(now())
+
+  tenantProfile TenantProfile?
+  listings      Listing[]      @relation("OwnerListings")
+  interests     Interest[]     @relation("TenantInterests")
+  messages      Message[]      @relation("SenderMessages")
+}
+
+model TenantProfile {
+  id                String   @id @default(uuid())
+  userId            String   @unique
+  user              User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  preferredLocation String
+  budgetMin         Int
+  budgetMax         Int
+  moveInDate        DateTime
+  updatedAt         DateTime @updatedAt
+}
+
+model Listing {
+  id                String            @id @default(uuid())
+  ownerId           String
+  owner             User              @relation("OwnerListings", fields: [ownerId], references: [id], onDelete: Cascade)
+  location          String
+  rent              Int
+  availableFrom     DateTime
+  roomType          RoomType
+  furnishingStatus  FurnishingStatus
+  photos            String            @default("[]") // JSON-encoded array of photo URLs
+  status            ListingStatus     @default(ACTIVE)
+  createdAt         DateTime          @default(now())
+  updatedAt         DateTime          @updatedAt
+
+  interests         Interest[]
+  compatibilities   Compatibility[]
+}
+
+model Compatibility {
+  id            String      @id @default(uuid())
+  tenantId      String
+  listingId     String
+  listing       Listing     @relation(fields: [listingId], references: [id], onDelete: Cascade)
+  score         Int
+  explanation   String
+  source        ScoreSource
+  createdAt     DateTime    @default(now())
+
+  @@unique([tenantId, listingId])
+}
+
+model Interest {
+  id          String         @id @default(uuid())
+  tenantId    String
+  tenant      User           @relation("TenantInterests", fields: [tenantId], references: [id], onDelete: Cascade)
+  listingId   String
+  listing     Listing        @relation(fields: [listingId], references: [id], onDelete: Cascade)
+  status      InterestStatus @default(PENDING)
+  compatScore Int?
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
+
+  messages    Message[]
+
+  @@unique([tenantId, listingId])
+}
+
+model Message {
+  id         String   @id @default(uuid())
+  interestId String
+  interest   Interest @relation(fields: [interestId], references: [id], onDelete: Cascade)
+  senderId   String
+  sender     User     @relation("SenderMessages", fields: [senderId], references: [id], onDelete: Cascade)
+  content    String
+  createdAt  DateTime @default(now())
+}

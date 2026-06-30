@@ -1,0 +1,180 @@
+# Rent & Flatmate Finder
+
+A full-stack platform where room **owners** post listings and **tenants** create
+"looking for room" profiles. An LLM-powered compatibility engine scores and ranks
+matches, accepted matches unlock real-time chat, and email notifications fire on
+key events (high-compatibility interest, accept/decline).
+
+## Tech Stack
+
+| Layer       | Choice                                                                 |
+|-------------|-------------------------------------------------------------------------|
+| Backend     | Node.js, Express, Socket.io                                            |
+| Database    | SQLite via Prisma ORM (swap to Postgres for production — see below)    |
+| Auth        | JWT, bcrypt password hashing, role-based access (`TENANT`/`OWNER`/`ADMIN`) |
+| AI scoring  | Anthropic Claude API, with an automatic rule-based fallback             |
+| Email       | Nodemailer (any SMTP provider), falls back to console logging in dev    |
+| Frontend    | React 18 + Vite, React Router, socket.io-client                        |
+
+## Project Structure
+
+```
+backend/
+  prisma/schema.prisma      # DB schema (see below)
+  src/
+    index.js                # Express + Socket.io entrypoint
+    routes/                 # auth, tenant, listings, interests, chat, admin
+    services/llm.service.js     # compatibility scoring (LLM + rule-based fallback)
+    services/email.service.js   # SMTP email with dev console fallback
+    sockets/chat.socket.js      # real-time chat (JWT-authenticated)
+    middleware/auth.js          # JWT auth + role guard
+    utils/seed.js                # seeds the admin account
+frontend/
+  src/
+    pages/                  # AuthPage, TenantDashboard, OwnerDashboard, AdminDashboard, ChatPage
+    api/client.js           # typed fetch wrapper for the REST API
+    context/AuthContext.jsx # JWT/session state
+```
+
+## Setup Guide
+
+### Prerequisites
+- Node.js 18+
+- npm
+
+### 1. Backend
+
+```bash
+cd backend
+cp .env.example .env       # edit values as needed (see below)
+npm install
+npx prisma generate
+npx prisma migrate dev --name init
+npm run seed                # creates the admin account
+npm run dev                  # starts the API on http://localhost:4000
+```
+
+`npx prisma generate`/`migrate` download Prisma's query engine binary on first
+run, so an internet connection is required at setup time (one-time, standard
+Prisma behavior).
+
+### 2. Frontend
+
+```bash
+cd frontend
+cp .env.example .env       # VITE_API_URL should point at the backend
+npm install
+npm run dev                  # starts the app on http://localhost:5173
+```
+
+Visit `http://localhost:5173`, register as a Tenant or Owner, or log in as the
+seeded admin (credentials from `backend/.env` → `ADMIN_EMAIL` / `ADMIN_PASSWORD`).
+
+### Environment Variables
+
+**backend/.env.example**
+```
+PORT=4000
+CLIENT_URL=http://localhost:5173
+DATABASE_URL="file:./dev.db"
+JWT_SECRET=replace_this_with_a_long_random_secret
+JWT_EXPIRES_IN=7d
+ANTHROPIC_API_KEY=
+ANTHROPIC_MODEL=claude-3-5-haiku-20241022
+SMTP_HOST=
+SMTP_PORT=587
+SMTP_USER=
+SMTP_PASS=
+SMTP_FROM="Rent & Flatmate Finder <no-reply@flatmatefinder.com>"
+ADMIN_EMAIL=admin@flatmatefinder.com
+ADMIN_PASSWORD=Admin@12345
+```
+- Leave `ANTHROPIC_API_KEY` blank to run entirely on the rule-based fallback scorer.
+- Leave `SMTP_*` blank to log emails to the console instead of sending them (useful for local dev/grading without setting up an SMTP account).
+
+**frontend/.env.example**
+```
+VITE_API_URL=http://localhost:4000
+```
+
+### Deploying to Production (Postgres)
+SQLite is used by default for zero-config local setup. To deploy (Render/Railway/etc.):
+1. Provision a Postgres database and copy its connection string.
+2. In `backend/prisma/schema.prisma`, change `provider = "sqlite"` to `provider = "postgresql"`.
+3. Set `DATABASE_URL` to the Postgres connection string in your host's environment variables.
+4. Run `npx prisma migrate deploy` as part of your build/release step.
+5. Set `CLIENT_URL` to your deployed frontend's URL (for CORS) and deploy the frontend with `VITE_API_URL` pointing at your deployed backend.
+
+## Database Schema
+
+- **User** — `id, email, password (hashed), name, role (TENANT/OWNER/ADMIN), isActive, createdAt`
+- **TenantProfile** (1:1 with User) — `preferredLocation, budgetMin, budgetMax, moveInDate`
+- **Listing** (owned by User) — `location, rent, availableFrom, roomType, furnishingStatus, photos (JSON array), status (ACTIVE/FILLED)`
+- **Compatibility** (unique per tenant+listing) — `score (0-100), explanation, source (LLM/RULE_BASED)` — computed once and cached, not recomputed every request
+- **Interest** (unique per tenant+listing) — `status (PENDING/ACCEPTED/DECLINED), compatScore`
+- **Message** (belongs to an accepted Interest) — `senderId, content, createdAt`
+
+Full definitions are in `backend/prisma/schema.prisma`.
+
+## API Documentation
+
+All endpoints are prefixed with `/api`. Authenticated routes require
+`Authorization: Bearer <token>`.
+
+| Method | Route | Role | Description |
+|---|---|---|---|
+| POST | `/auth/register` | — | Register as TENANT or OWNER |
+| POST | `/auth/login` | — | Log in, returns JWT |
+| GET  | `/auth/me` | any | Current user |
+| GET/PUT | `/tenant/profile` | TENANT | View/update preferences |
+| POST | `/listings` | OWNER | Create a listing |
+| GET  | `/listings/mine` | OWNER | Owner's own listings |
+| GET  | `/listings?location=&budgetMax=` | TENANT | Browse, ranked by compatibility score |
+| GET  | `/listings/:id` | any | Listing detail |
+| PATCH| `/listings/:id` | OWNER | Edit own listing |
+| PATCH| `/listings/:id/fill` | OWNER | Mark filled (hides from search) |
+| POST | `/interests` | TENANT | Express interest in a listing |
+| GET  | `/interests/mine` | TENANT | Own interest requests |
+| GET  | `/interests/received` | OWNER | Interests on owner's listings |
+| PATCH| `/interests/:id` | OWNER | Accept/decline (`{status}`) |
+| GET  | `/chat` | TENANT/OWNER | List accepted chat threads |
+| GET  | `/chat/:interestId/messages` | TENANT/OWNER | Message history |
+| GET  | `/admin/users` | ADMIN | All users |
+| PATCH| `/admin/users/:id` | ADMIN | Enable/disable a user |
+| GET  | `/admin/listings` | ADMIN | All listings |
+| GET  | `/admin/activity` | ADMIN | Platform stats + recent activity |
+
+### Real-time Chat (Socket.io)
+Connect with `io(API_URL, { auth: { token } })`. Events:
+- `join_room({ interestId })` — joins the room (server validates the interest is ACCEPTED and the caller is a participant)
+- `send_message({ interestId, content })` — persists and broadcasts to the room as `new_message`
+
+## LLM Compatibility Scoring
+
+**Prompt** (sent to Claude, `backend/src/services/llm.service.js`):
+```
+Given this room listing: {location, rent, availableFrom, roomType, furnishingStatus}
+and this tenant profile: {preferredLocation, budgetMin, budgetMax, moveInDate},
+compute a compatibility score from 0 to 100 based on budget and location match.
+Return JSON: { score: number, explanation: string }
+```
+
+**Example input:**
+```json
+{
+  "listing": { "location": "Koramangala, Bangalore", "rent": 18000, "roomType": "PRIVATE", "furnishingStatus": "FURNISHED" },
+  "tenant":  { "preferredLocation": "Koramangala", "budgetMin": 15000, "budgetMax": 20000 }
+}
+```
+
+**Example LLM output:**
+```json
+{ "score": 92, "explanation": "Listing is in the tenant's preferred neighborhood and the rent fits comfortably within budget." }
+```
+
+**Fallback behavior:** if `ANTHROPIC_API_KEY` is unset, the request times out (12s), the API errors, or the response isn't parseable JSON, the system automatically falls back to a deterministic rule-based score (50 pts for location substring match + up to 50 pts for budget fit) and tags the record `source: RULE_BASED`. The score and explanation are persisted in the `Compatibility` table on first computation and reused thereafter — they're only recomputed if the tenant updates their profile.
+
+## Notifications
+- Owner is emailed when a tenant expresses interest; subject line is escalated when the compatibility score exceeds 80.
+- Tenant is emailed when the owner accepts or declines their interest.
+- Without SMTP configured, emails are printed to the backend console (so the flow is fully testable without a mail account).
