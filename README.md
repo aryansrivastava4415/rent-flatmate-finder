@@ -1,5 +1,10 @@
 # Rent & Flatmate Finder
 
+🔗 **Live App**: https://rent-flatmate-frontend.onrender.com
+🔗 **Backend API**: https://rent-flatmate-backend.onrender.com
+
+> Note: hosted on Render's free tier, so the first request after a period of inactivity may take 30–50 seconds (cold start) — this is expected and resolves on its own.
+
 A full-stack platform where room **owners** post listings and **tenants** create
 "looking for room" profiles. An LLM-powered compatibility engine scores and ranks
 matches, accepted matches unlock real-time chat, and email notifications fire on
