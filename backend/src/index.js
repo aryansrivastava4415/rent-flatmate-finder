@@ -11,6 +11,7 @@ const interestsRoutes = require('./routes/interests.routes');
 const chatRoutes = require('./routes/chat.routes');
 const adminRoutes = require('./routes/admin.routes');
 const { registerChatSocket } = require('./sockets/chat.socket');
+const { seedAdmin } = require('./utils/seed');
 
 const app = express();
 const server = http.createServer(app);
@@ -42,6 +43,10 @@ const io = new Server(server, { cors: { origin: clientUrl, credentials: true } }
 registerChatSocket(io);
 
 const PORT = process.env.PORT || 4000;
-server.listen(PORT, () => {
-  console.log(`Rent & Flatmate Finder API listening on port ${PORT}`);
-});
+seedAdmin()
+  .catch((err) => console.error('[startup] Failed to seed admin account:', err.message))
+  .finally(() => {
+    server.listen(PORT, () => {
+      console.log(`Rent & Flatmate Finder API listening on port ${PORT}`);
+    });
+  });

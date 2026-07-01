@@ -120,7 +120,7 @@ database, backend, and frontend together in a single step:
    - The backend web service (`rent-flatmate-backend`) — `DATABASE_URL`, `JWT_SECRET`, and `CLIENT_URL` are wired automatically
    - The frontend static site (`rent-flatmate-frontend`) — `VITE_API_URL` is wired automatically to the backend's URL
 5. You'll be prompted for a few secret values (marked `sync: false` in `render.yaml`): `ANTHROPIC_API_KEY` (optional — leave blank to use the rule-based fallback), `ADMIN_PASSWORD`, and SMTP credentials (optional — leave blank to log emails to console).
-6. Once both services are live, open the backend's **Shell** tab and run `npm run seed` to create the admin account.
+6. Once deployed, the backend automatically seeds the admin account on startup (no Shell access required — this also works on Render's free tier, which doesn't support Shell). Log in with `ADMIN_EMAIL` (default `admin@flatmatefinder.com`) and the `ADMIN_PASSWORD` you provided.
 7. Visit the frontend's URL (shown on its Render dashboard page) — the app is live.
 
 This avoids manually creating a database, two services, and cross-wiring environment variables by hand.
