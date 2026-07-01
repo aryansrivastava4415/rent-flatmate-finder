@@ -60,9 +60,10 @@ cp .env.example .env       # edit DATABASE_URL etc. as needed (see above)
 npm install
 npx prisma generate
 npx prisma migrate dev --name init
-npm run seed                # creates the admin account
 npm run dev                  # starts the API on http://localhost:4000
 ```
+
+> Note: this repo doesn't include a `prisma/migrations` folder (it wasn't possible to generate one during development due to a network-restricted sandbox). `npx prisma migrate dev --name init` will generate it on first run in a normal environment. If you only need to sync the schema without a migration history (e.g. quick local testing), you can instead run `npx prisma db push`, which is also what the Render Blueprint uses in production.
 
 `npx prisma generate`/`migrate` download Prisma's query engine binary on first
 run, so an internet connection is required at setup time (one-time, standard
