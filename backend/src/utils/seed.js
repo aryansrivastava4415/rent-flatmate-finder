@@ -5,17 +5,14 @@ const prisma = require('../prisma');
 async function seedAdmin() {
   const adminEmail = process.env.ADMIN_EMAIL || 'admin@flatmatefinder.com';
   const adminPassword = process.env.ADMIN_PASSWORD || 'Admin@12345';
+  const hashed = await bcrypt.hash(adminPassword, 10);
 
-  const existingAdmin = await prisma.user.findUnique({ where: { email: adminEmail } });
-  if (!existingAdmin) {
-    const hashed = await bcrypt.hash(adminPassword, 10);
-    await prisma.user.create({
-      data: { email: adminEmail, password: hashed, name: 'Platform Admin', role: 'ADMIN' },
-    });
-    console.log(`Seeded admin account: ${adminEmail}`);
-  } else {
-    console.log('Admin account already exists, skipping.');
-  }
+  await prisma.user.upsert({
+    where: { email: adminEmail },
+    update: { password: hashed },
+    create: { email: adminEmail, password: hashed, name: 'Platform Admin', role: 'ADMIN' },
+  });
+  console.log(`Admin account ready: ${adminEmail} (password synced from ADMIN_PASSWORD env var)`);
 }
 
 // Allow running directly via `npm run seed`
